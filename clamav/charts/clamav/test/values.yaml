@@ -22,7 +22,7 @@ clamav:
   # clamav.image -- (optional) Fully-qualified image override. When set, imageRegistry/imageNamespace/imageName are ignored
   image: ""
   # clamav.version -- The clamav docker image version - defaults to .Chart.appVersion
-  tag: "1.0.3"
+  tag: ""
   # clamav.imagePullPolicy -- IfNotPresent
   imagePullPolicy: IfNotPresent
   replicaCount: 2
