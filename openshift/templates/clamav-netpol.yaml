@@ -1,0 +1,36 @@
+# Sample NetworkPolicy — allows one consuming app namespace to reach clamd on 3310.
+#
+# One copy of this is needed per app namespace AND per environment that talks to
+# ClamAV. It lives in the ClamAV namespace, not the app's namespace, and should
+# be owned/deployed by the consuming team alongside the rest of their manifests.
+#
+# Replace before applying:
+#   <APP NS>    the consuming app's namespace prefix (e.g. abc123)
+#   <ENV>       dev | test | prod
+#   <CLAM NS>   the namespace prefix ClamAV is deployed into
+#   <app name>  the consuming app, for the managed-by/part-of labels
+#
+#   oc apply -f openshift/templates/clamav-netpol.yaml -n <CLAM NS>-<ENV>
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-<APP NS>-<ENV>-to-clamav
+  namespace: <CLAM NS>-<ENV>
+  labels:
+    app.kubernetes.io/managed-by: nr-<app name>
+    app.kubernetes.io/part-of: nr-<app name>
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: clamav
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 3310
+      from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: <APP NS>-<ENV>
+  policyTypes:
+    - Ingress
