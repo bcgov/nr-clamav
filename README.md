@@ -99,6 +99,59 @@ clamd speaks the raw TCP clamd protocol (not HTTP) on port **3310**. On OpenShif
 # within the same namespace, simply: <release>-clamav:3310
 ```
 
+### Network policy (required for cross-namespace access)
+
+Namespaces on the Silver cluster deny cross-namespace traffic by default, so a consuming app in a **different** namespace cannot reach clamd until a `NetworkPolicy` in the **ClamAV** namespace explicitly allows it. Without one, connections to port 3310 hang and time out rather than being refused.
+
+**One policy is needed per app namespace, per environment.** A policy allowing `abc123-dev` does not cover `abc123-test`. Each consuming team should own their policy and deploy it alongside the rest of their manifests — even though the object itself lands in the ClamAV namespace. The `part-of` / `managed-by` labels are what keep it attributable to the app that needs it.
+
+A sample lives at [openshift/templates/clamav-netpol.yaml](./openshift/templates/clamav-netpol.yaml). Copy it, substitute the placeholders, and apply it into the ClamAV namespace:
+
+| Placeholder | Meaning |
+| ---- | ---- |
+| `<APP NS>` | The consuming app's namespace prefix, e.g. `abc123` |
+| `<ENV>` | `dev`, `test` or `prod` |
+| `<CLAM NS>` | The namespace prefix ClamAV is deployed into |
+| `<app name>` | The consuming app, used in the `nr-<app name>` labels |
+
+```yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-<APP NS>-<ENV>-to-clamav
+  namespace: <CLAM NS>-<ENV>
+  labels:
+    app.kubernetes.io/managed-by: nr-<app name>
+    app.kubernetes.io/part-of: nr-<app name>
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: clamav
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 3310
+      from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: <APP NS>-<ENV>
+  policyTypes:
+    - Ingress
+```
+
+```
+oc apply -f openshift/templates/clamav-netpol.yaml -n <CLAM NS>-<ENV>
+```
+
+The `podSelector` matches the `app.kubernetes.io/name: clamav` label the Helm chart puts on the pods, so it targets clamd regardless of release name. The `kubernetes.io/metadata.name` label used by the `namespaceSelector` is applied automatically by Kubernetes to every namespace — nothing needs to be labelled by hand.
+
+Confirm the policy is in place from a pod in the app namespace:
+
+```
+# expects: PONG
+echo -e 'zPING\0' | nc -q1 <release>-clamav.<CLAM NS>-<ENV>.svc 3310
+```
+
 ### Running / testing locally
 
 You can talk to clamd from your workstation without OpenShift in a couple of ways.
